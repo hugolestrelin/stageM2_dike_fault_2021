@@ -9,6 +9,6 @@ function [sig] = dyke(d,Ld,x,z,b,nu,mu)
     ftxzbot=disp_txz_partial(-(d+Ld),x,-z,b,nu,mu);
     txz=ftxzbot-ftxztop;
     sig.xx=txx;
-    sig.xy=txz;
-    sig.yy=tzz;
+    sig.xz=txz;
+    sig.zz=tzz;
 end

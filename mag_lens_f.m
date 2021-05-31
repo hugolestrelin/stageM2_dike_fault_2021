@@ -61,7 +61,7 @@ function [sig] = mag_lens_f(rx,ry,P,L,nu,wd,x0) % rx and ry matrix n*m*o ,tau,al
     theta2(ry<wd & rx-x0<-L/2)=rad2deg(pi)+(atand(abs(wd-ry(ry<wd & rx-x0<-L/2))./abs(L/2-(rx(ry<wd & rx-x0<-L/2)-x0))));
     a=L/2;
     sig.xx=P*(r./(r1.*r2).^(1/2).*(cosd(theta-(theta1+theta2)/2))-1-((a^2)*r./((r1.*r2).^(3/2))).*(sind(theta)).*(sind(3/2*(theta1+theta2))));
-    sig.xy=P*(a^2)*r./(r1.*r2).^(3/2).*(sind(theta)).*(cosd(3/2*(theta1+theta2)));
-    sig.yy=P*(r./(r1.*r2).^(1/2).*(cosd(theta-(theta1+theta2)/2))-1+((a^2)*r./((r1.*r2).^(3/2))).*(sind(theta)).*(sind(3/2*(theta1+theta2))));
-    sig.zz=nu*(sig.xx+sig.yy);
+    sig.xz=P*(a^2)*r./(r1.*r2).^(3/2).*(sind(theta)).*(cosd(3/2*(theta1+theta2)));
+    sig.zz=P*(r./(r1.*r2).^(1/2).*(cosd(theta-(theta1+theta2)/2))-1+((a^2)*r./((r1.*r2).^(3/2))).*(sind(theta)).*(sind(3/2*(theta1+theta2))));
+    sig.yy=nu*(sig.xx+sig.zz);
 end
