@@ -4,13 +4,13 @@
 code_patin_ressort=0;
 
 year=3600*24*365;  %--number of seconds in one year
-
+lithos_act=0;
+    
 if code_patin_ressort==1
    disp('interaction activated')
 else
-    mag_lens_act=1; 
-    lithos_act=0;
-    dyke_act=0;
+    mag_lens_act=0; 
+    dyke_act=1;
     fault_act=0;
 end
 
@@ -21,7 +21,7 @@ dfs=1000;%[0,1000,2000,3000,4000,5000,10000,15000,20000]; % distance btw end of 
 if code_patin_ressort==1
    'interaction activated';
 else
-   P=1e8/(year*1e2);    % initial overpressure rate in the crack (Pa/s)
+   P=1e8/(year*1e1);    % initial overpressure rate in the crack (Pa/s)
 end
 L=502;    % crack width (m) ; take an even nbr
 theta=0; % crack angle relative to the x axis (deg) non implementé
@@ -34,10 +34,10 @@ g=9.8; %--free-fall cte (m/s)
 rho=2900; %--rock density (kg/m3)
 
 %--DYKE--%
-dd=0; % depth to top of crack (m)
+dd=-100; % depth to top of crack (m)
 Ld=z0; % height of crack (m)
-b=0.01; % crack opening (m)
-mu=10e9; % shear modulus (Pa)
+b=0.1; % crack opening (m)
+mu=3e10; % shear modulus (Pa)
 nud=nus; % poisson coefficient
 
 sign_tt=dfs;
@@ -52,12 +52,15 @@ SIG_Mag={};
 SIGT={};
 
 %--BOX--%
-pas=20;
+pas=10;
 
 %--FAULT--%
-thetaf=45+90;%+180? % fault dip
+thetaf=60;%+180? % fault dip
 Lf=abs(z0)/sind(thetaf); % surface of displacement on fault (?)
 nu=nud;
+
+pasxsi=10;
+xsilength=100;
 
 for k=1:rr(2)
     %--BOX--%
@@ -74,13 +77,19 @@ for k=1:rr(2)
     df=xsi(2)+(Lf*sind(thetaf))/2; % fault top depth 
     if cosd(thetaf)==0
         xfp=zeros([1 10]);
+        xsi1=zeros([1 pasxsi]);
         zfp=xsi(2)-(Lf*sind(thetaf))/2:(Lf*sind(thetaf))/9:xsi(2)+(Lf*sind(thetaf))/2;
+        xsi2=xsi(2)-(xsilength*sind(thetaf))/2:(xsilength*sind(thetaf))/(pasxsi-1):xsi(2)+(xsilength*sind(thetaf))/2;
     elseif sind(thetaf)==0
         xfp=xsi(1)-(Lf*cosd(thetaf))/2:(Lf*cosd(thetaf))/9:xsi(1)+(Lf*cosd(thetaf))/2;
+        xsi1=xsi(1)-(xsilength*cosd(thetaf))/2:(xsilength*cosd(thetaf))/(pasxsi-1):xsi(1)+(xsilength*cosd(thetaf))/2;
         zfp=zeros([1 10]);
+        xsi2=zeros([1 pasxsi]);
     else
         xfp=xsi(1)-(Lf*cosd(thetaf))/2:(Lf*cosd(thetaf))/10:xsi(1)+(Lf*cosd(thetaf))/2;
+        xsi1=xsi(1)-(xsilength*cosd(thetaf))/2:(xsilength*cosd(thetaf))/(pasxsi-1):xsi(1)+(xsilength*cosd(thetaf))/2;
         zfp=xsi(2)-(Lf*sind(thetaf))/2:(Lf*sind(thetaf))/10:xsi(2)+(Lf*sind(thetaf))/2;
+        xsi2=xsi(2)-(xsilength*sind(thetaf))/2:(xsilength*sind(thetaf))/(pasxsi-1):xsi(2)+(xsilength*sind(thetaf))/2;
     end
     % where is le milieu de la faille ?
     F=X>xsi(1);
@@ -129,7 +138,7 @@ for k=1:rr(2)
         SIG_dyke.xz = zeros(size(X));
     end
     if fault_act==1
-        [SIG_fault,U1,U2] = fault_okada(X,Z,mu,Lf,df,nus,thetaf,xsi);
+        [SIG_fault,U1,U2] = fault_okada(X,Z,mu,Lf,df,nus,thetaf,xsi1,xsi2);
     else
         SIG_fault.xx = zeros(size(X));
         SIG_fault.zz = zeros(size(X));
@@ -184,10 +193,11 @@ end
 
 ploti=0;
 if ploti==1
-    h=pcolor(x,z,(SIGT.xx(:,:)));
+    %h=pcolor(x,z,(SIGT.xx(:,:)));
+    %h=pcolor(x,z,((1/2)*(SIGT.xx(:,:)+SIGT.zz(:,:)+2*(SIGT.xz(:,:)))));
     %h=pcolor(x,y,(sig_xx(:,:,1)));
     %h=pcolor(x,y,(sig_xy(:,:,1)));
-    %h=pcolor(x,y,(sign_tot(:,:,2)));
+    h=pcolor(x,z,(sign_tot(:,:)));
     %h=pcolor(x,y,(tau_tot(:,:,2)-tau_tot(:,:,1))/dp);
     %h=pcolor(x,y,(tau_tot(:,:,1)));
     %h=pcolor(x,y,((1/2)*(SIGT.xx(:,:)+SIGT.yy(:,:)+2*(SIGT.xy(:,:)))));
@@ -195,7 +205,7 @@ if ploti==1
     %h=pcolor(x,y,SIGT(1).xx(:,:));
     axis equal
     colormap(redblue)
-    %caxis([-0.1e7,0.1e7])
+    %caxis([-10,10])
     colorbar
     hold on
     p=plot(xfp,zfp,'k');
@@ -207,7 +217,9 @@ if ploti==1
     title('Trace du tenseur des contraintes','fontsize',22)
 end
 
-dsigm.n=sign_tt;
+%plot(x,U2(1101,:))
+
+dsigm.n=-sign_tt;
 dsigm.t=tau_tt
 
 dsigOP=[];
