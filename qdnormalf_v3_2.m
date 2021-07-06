@@ -28,7 +28,7 @@ param.alpha=0.3;%--Linker-Dieterich coeff.
 param.u0=0;  %--initial displacement (controls initial (compressive) stress)
 param.dtau1=0.0*param.rho*param.g*param.z; %--ça je me souviens plus ce que c'est
 param.niter=100000; %--number of iterations
-param.tfinal=100*year; %--temps de modélisation en année
+param.tfinal=6*year; %--temps de modélisation en année
 param.tdike=1e500*year; % initialisation très (TRÈS) tardive afin de ne pas avoir d'effet sur la loi d'évolution du dike initialement
 param.nbd=3*year/120;
 param.OPdike=0;%P*year;
@@ -108,6 +108,7 @@ sigOP_ref=param.rho*param.g*z0/(param.rho*param.g*param.z)*par.dsigOP./par.dsigO
 POP=0;
 cumuldike=0;
 totaldikewidth=0;
+cumulsigop=sigOP_ref;
 
 %%
 
@@ -126,6 +127,7 @@ fidfco=fopen([repres,'fco.data'],'w+');
 fiddbc=fopen([repres,'dbc.data'],'w+');
 fiddpc=fopen([repres,'dpc.data'],'w+');
 fidtdw=fopen([repres,'tdw.data'],'w+');
+fidsop=fopen([repres,'sop.data'],'w+');
 
 while t<par.tfinal
     
@@ -142,6 +144,7 @@ while t<par.tfinal
     fwrite(fiddbc,dbc,'real*8');
     fwrite(fiddpc,dpc,'real*8');
     fwrite(fidtdw,totaldikewidth,'real*8');
+    fwrite(fidsop,sigOP,'real*8');
     %----------------------%
     %-Update var.----------%
     %----------------------%
@@ -172,7 +175,7 @@ while t<par.tfinal
             POP=0;
             param.dyke_act=1;
             param.mag_lens_act=0; 
-            b=0.1*par.POP/(-0.212609338316523); % wd proportionnel à POP sur la base de la première valeur de POP ; est-ce juste ?
+            b=0.01*par.POP/(-0.212609338316523); % wd proportionnel à POP sur la base de la première valeur de POP ; est-ce juste ?
             par.wd=b/param.dc;
             run sig_defo_v3
             par.tdike=t;
@@ -186,7 +189,7 @@ while t<par.tfinal
             if t<dikecountdown
                 param.dyke_act=1;
             else 
-                if param.dyke_act==1 && par.ndike>1
+                if param.dyke_act==1 %&& par.ndike>1
                     par.cumulwidth=par.cumulwidth+par.wd;
                 end
                 %retour à la normale
@@ -214,19 +217,20 @@ while t<par.tfinal
 %             sigm.t=sigm.t+dsigm.t/(param.rho*param.g*param.z)*dt*param.dc/param.vp; 
 %             sigOP=sigOP+par.dsigOP*b*dt;
         end
+        [dbi,dbc,dpi,dpc]=evoldyke(param,par,t);
+        totaldikewidth=dbc+par.cumulwidth;
+        if param.dyke_act==1
+            %disp('on est là ?')
+            sigm.n=dbc*par.dsigmn_dike+dpc*par.dsigmn_sbh;
+            sigm.t=dbc*par.dsigmt_dike+dpc*par.dsigmt_sbh;
+            sigOP=dbc*par.dsigOP_dike+dpc*par.dsigOP_sbh+sigOP_ref; %/ simple addition constante des résultats du champs des contraintes non ?
+        else
+            sigm.n=dpc*par.dsigmn;
+            sigm.t=dpc*par.dsigmt;
+            sigOP=dpc*par.dsigOP+sigOP_ref;
+        end
     end
-    [dbi,dbc,dpi,dpc]=evoldyke(param,par,t);
-    totaldikewidth=dbc+par.cumulwidth;
-    if param.dyke_act==1
-        %disp('on est là ?')
-        sigm.n=dbc*par.dsigmn_dike+dpc*par.dsigmn_sbh;
-        sigm.t=dbc*par.dsigmt_dike+dpc*par.dsigmt_sbh;
-        sigOP=dbc*par.dsigOP_dike+dpc*par.dsigOP_sbh+sigOP_ref; %/ simple addition constante des résultats du champs des contraintes non ?
-    else
-        sigm.n=dpc*par.dsigmn;
-        sigm.t=dpc*par.dsigmt;
-        sigOP=dpc*par.dsigOP+sigOP_ref;
-    end
+    
     %sigOP=sigOP+par.dsigOP*dt;
     if t>tpsii(tpsi)/10*par.tfinal
             disp([num2str(floor(100*t/par.tfinal)),' % completed']);
@@ -234,7 +238,7 @@ while t<par.tfinal
             %disp(sigOP)
     end
     %disp(sigOP)
-    
+    cumulsigop=[cumulsigop sigOP];
 end
 %----------------------%
 %-Close output files---%
@@ -249,7 +253,7 @@ fclose(fidfco);
 fclose(fiddbc);
 fclose(fiddpc);
 fclose(fidtdw);
-
+fclose(fidsop);
 
 function [phi,th,u,sig,dt,error]=rk4fehlberg(dt,par,phi,th,u,sig,tau1,t,param)
 

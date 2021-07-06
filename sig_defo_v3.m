@@ -1,17 +1,20 @@
 %--------------%
 %--parameters--%
 %--------------%
-code_patin_ressort=0;
+%code_patin_ressort=0;
 
 year=3600*24*365;  %--number of seconds in one year
 lithos_act=0;
     
 if code_patin_ressort==1
    disp('interaction activated')
+   mag_lens_act=param.mag_lens_act; 
+   dyke_act=param.dyke_act;
+   fault_act=param.fault_act;
 else
     mag_lens_act=0; 
-    dyke_act=1;
-    fault_act=0;
+    dyke_act=0;
+    fault_act=1;
 end
 
 %--INTERACTIONS PARAMETERS--%
@@ -19,7 +22,7 @@ dfs=1000;%[0,1000,2000,3000,4000,5000,10000,15000,20000]; % distance btw end of 
 
 %--SILL--%
 if code_patin_ressort==1
-   'interaction activated';
+   P=P;
 else
    P=1e8/(year*1e1);    % initial overpressure rate in the crack (Pa/s)
 end
@@ -34,9 +37,14 @@ g=9.8; %--free-fall cte (m/s)
 rho=2900; %--rock density (kg/m3)
 
 %--DYKE--%
-dd=-100; % depth to top of crack (m)
+dd=0; % depth to top of crack (m) %-100
 Ld=z0; % height of crack (m)
-b=0.1; % crack opening (m)
+if code_patin_ressort==1
+    b=b;
+else
+    b=0.1; % crack opening (m)
+    where_dyke=0;
+end
 mu=3e10; % shear modulus (Pa)
 nud=nus; % poisson coefficient
 
@@ -44,19 +52,26 @@ sign_tt=dfs;
 tau_tt=dfs;
 sign_ttt=dfs;
 tau_ttt=dfs;
+sign_ttt_wd=dfs;
+tau_ttt_wd=dfs;
 rr=size(dfs);
 SIG_lithos={};
 SIG_dyke={};
 SIG_fault={};
 SIG_Mag={};
 SIGT={};
+sigOP=[];
 
 %--BOX--%
 pas=10;
 
 %--FAULT--%
 thetaf=60;%+180? % fault dip
-Lf=abs(z0)/sind(thetaf); % surface of displacement on fault (?)
+if thetaf==0
+    Lf=abs(z0);
+else
+    Lf=abs(z0)/sind(thetaf); % surface of displacement on fault (?)
+end
 nu=nud;
 
 pasxsi=10;
@@ -131,7 +146,7 @@ for k=1:rr(2)
         SIG_Mag.xz = zeros(size(X));
     end
     if dyke_act==1
-        SIG_dyke = dyke(dd,Ld,X,Z,b,nud,mu);
+        SIG_dyke = dyke(dd,Ld,X-where_dyke(1),Z,b,nud,mu);
     else
         SIG_dyke.xx = zeros(size(X));
         SIG_dyke.zz = zeros(size(X));
@@ -151,9 +166,14 @@ for k=1:rr(2)
     SIGT.xz = SIG_Mag.xz+SIG_lithos.xz/abs(-rho*g)+SIG_dyke.xz+SIG_fault.xz/(mu*abs(Lf)/(2*pi*(1-nus)));
     tau_tot(:,:)=(SIGT(1).xx-SIGT(1).zz)*cosd(thetaf)*sind(thetaf)+SIGT(1).xz*(sind(thetaf)^2-cosd(thetaf)^2); % repère de pierre
     sign_tot(:,:)=SIGT(1).xx*sind(thetaf)^2+SIGT(1).zz*cosd(thetaf)^2-2*SIGT(1).xz*cosd(thetaf)*sind(thetaf); % repère de pierre
+    %tau_tot_wd(:,:)=(SIGT(1).xx-SIGT(1).zz)*cosd(90)*sind(90)+SIGT(1).xz*(sind(90)^2-cosd(90)^2); 
+    sign_tot_wd(:,:)=SIGT(1).xx*sind(90)^2+SIGT(1).zz*cosd(90)^2-2*SIGT(1).xz*cosd(90)*sind(90);
       
     sign_ttt(k)=sign_tot(idxz,idxx);
     tau_ttt(k)=tau_tot(idxz,idxx);
+    sign_ttt_wd(k)=sign_tot(idxz,round(s(2)/2));
+    %tau_ttt_wd(k)=tau_tot(idxz,round(s(2)/2));
+    sigOP=(SIGT.xx(izOP(1),ixOP)+SIGT.zz(izOP(1),ixOP))/2-(SIGT.xz(izOP(1),ixOP));
     sss=0;
     ttt=0;
     for m=2:xfpi(2)
@@ -197,15 +217,15 @@ if ploti==1
     %h=pcolor(x,z,((1/2)*(SIGT.xx(:,:)+SIGT.zz(:,:)+2*(SIGT.xz(:,:)))));
     %h=pcolor(x,y,(sig_xx(:,:,1)));
     %h=pcolor(x,y,(sig_xy(:,:,1)));
-    h=pcolor(x,z,(sign_tot(:,:)));
+    %h=pcolor(x,z,(sign_tot(:,:)));
     %h=pcolor(x,y,(tau_tot(:,:,2)-tau_tot(:,:,1))/dp);
     %h=pcolor(x,y,(tau_tot(:,:,1)));
     %h=pcolor(x,y,((1/2)*(SIGT.xx(:,:)+SIGT.yy(:,:)+2*(SIGT.xy(:,:)))));
-    %h=pcolor(x,y,((1/2)*(SIGT.xx(:,:)+SIGT.yy(:,:)-2*(SIGT.xy(:,:)))));
+    h=pcolor(x,z,((1/2)*(SIGT.xx(:,:)+SIGT.zz(:,:))));
     %h=pcolor(x,y,SIGT(1).xx(:,:));
     axis equal
     colormap(redblue)
-    %caxis([-10,10])
+    caxis([-10,10])
     colorbar
     hold on
     p=plot(xfp,zfp,'k');
@@ -219,6 +239,8 @@ end
 
 %plot(x,U2(1101,:))
 
+dsigmwd=-sign_ttt_wd;
+%dsigmwd.t=tau_ttt_wd;
 dsigm.n=-sign_tt;
 dsigm.t=tau_tt
 
