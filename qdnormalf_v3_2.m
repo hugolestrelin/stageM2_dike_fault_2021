@@ -1,24 +1,26 @@
 clear all 
 close all
 
-year=3600*24*365;  %--number of seconds in one year
-param.mag_lens_act=1; 
-param.dyke_act=0;
-param.fault_act=0;
 code_patin_ressort=1;
-b=0;
-P=1e6/(year); % intinial overpressure rate
-Pd_ref=P;
-run sig_defo_v3
+year=3600*24*365;  %--number of seconds in one year
+
 %---------------%
 %-D parameters--%
 %---------------%
-param.L=Lf;    %--normal fault length (m)
-param.gamma=thetaf; %--normal fault angle (deg)
-param.z=abs(xsi(2));    %--depth (m)
+param.L=500;    %--normal fault length (m)
+param.gamma=60; %--normal fault angle (deg)
+param.widthsill=502; %--epaisseur du sill
+param.thsill=0; %--orientation du sill /x1
+param.dfs=200; %--distance faille-sill au niveau de l'extrémité la plus profonde de la faille
+param.zsill=-1000; %--profondeur du sill, 0 correspond à la surface de l'océan
+param.xsill=0; %--position centre sill
+param.dd=0; %--profondeur du top du dike
+param.Ld=param.zsill; %--longuer du dike
+param.z=abs(param.zsill+param.zsill+(param.L*sind(param.gamma)))/2;    %--depth (m) abs((xsiup(2)+xsidown(2))/2)
 param.rho=3e3;  %--rock density (kg/m3)
 param.g=9.81;   %--gravity (m2/s)
-param.mu=mu;  %--shear modulus (Pa)
+param.mu=3e10;  %--shear modulus (Pa)
+param.nu=0.254; %--Poisson coeff
 param.f0=0.6;   %--static friction coeff.
 param.a=0.001;  %--friction param. 1 (rate-and-state)
 param.b=0.002;  %--friction param. 2 (rate-and-state)
@@ -28,14 +30,29 @@ param.alpha=0.3;%--Linker-Dieterich coeff.
 param.u0=0;  %--initial displacement (controls initial (compressive) stress)
 param.dtau1=0.0*param.rho*param.g*param.z; %--ça je me souviens plus ce que c'est
 param.niter=100000; %--number of iterations
-param.tfinal=6*year; %--temps de modélisation en année
+param.pasgrille=10; %--pas de la grille pour le calcul des déformations
+param.tfinal=2.5*year; %--temps de modélisation en année
 param.tdike=1e500*year; % initialisation très (TRÈS) tardive afin de ne pas avoir d'effet sur la loi d'évolution du dike initialement
-param.nbd=3*year/120;
+param.nbd=10*year/365;
 param.OPdike=0;%P*year;
-param.flaguprev=2*year; % activation de l'intéraction des elmts. Ideal : à automatiser. In pratique : donner une date choisie, attention à la faire varier selon param initiaux.
+param.flaguprev=1.15*year; % activation de l'intéraction des elmts. Ideal : à automatiser. In pratique : donner une date choisie, attention à la faire varier selon param initiaux.
 
 format long
- 
+
+param.mag_lens_act=0; 
+param.dyke_act=0;
+param.fault_act=1;
+run sig_defo_v3
+par.dsigOPfault=dsigOP/(param.rho*param.g*param.z);
+
+param.mag_lens_act=1; 
+param.dyke_act=0;
+param.fault_act=0;
+b=0;
+P=1*1e7/(year); % intinial overpressure rate
+Pd_ref=P;
+run sig_defo_v3
+
 %---------------------%
 %-Non Dim parameters--%
 %---------------------%
@@ -102,13 +119,25 @@ dpc=0;
 fco=friction(par,phi,th);  %friction coefficient
 tau=fco*sig;    %-Norm. shear stress tau/(rho*g*z)
 tpsi=1;
+tpsi2=1;
 tpsii=[1:10];
+isave=1000;
+tpsii2=[1:isave];
 dikecountdown=-1;
 sigOP_ref=param.rho*param.g*z0/(param.rho*param.g*param.z)*par.dsigOP./par.dsigOP; %z0 profondeur du sill
+sigOP=sigOP_ref;
 POP=0;
 cumuldike=0;
 totaldikewidth=0;
 cumulsigop=sigOP_ref;
+
+catdike.width=[];
+catdike.t=[];
+catdike.n=[];
+catdike.nbd=[];
+catdike.where=[];
+
+catseisme.t=[];
 
 %%
 
@@ -148,26 +177,24 @@ while t<par.tfinal
     %----------------------%
     %-Update var.----------%
     %----------------------%
-    if param.dyke_act==1
-        %disp('on cherche ça ?')
-    end
     phiex=phi;thex=th;uex=u;sigex=sig;tauex=tau;
     [phi,th,u,sig,dt,error]=rk4fehlberg(dt,par,phi,th,u,sig,tau1,t,param);
     phi=phinew(par,phi,th,u,tau1,t,sigm,param);
     fco=friction(par,phi,th);
     tau=fco*sig;
-    t=t+dt;
-    POP=POP+Pd_ref*dt*param.dc/param.vp;
     %par.POP=POP/(param.rho*param.g*param.z);
-    
+    if exp(phi)>1e5
+        catseisme.t=[catseisme.t t];
+    end
     if t>par.flaguprev
+        POP=POP+Pd_ref*dt*param.dc/param.vp;
         if max(sigOP)>par.OPdike && param.dyke_act==0 % calculer deux dsigm : dike (pa/m) et decompression sill (pa instantané) car pas m^ evol (donc adimensionalisation)
             disp('Oh le joli dike !')
-            param.mag_lens_act=1; 
+            param.mag_lens_act=1;
             P=-POP; %modulation de la decompression en fonction du temps passé
             par.POP=P/(param.rho*param.g*param.z);
-            where_dyke=X(1,ixOP(find(sigOP>par.OPdike)),1); % partie où l'on trouve l'endroit où se déclenche dike
-            disp(where_dyke)
+            where_dyke=X(1,ixOP(find(sigOP==max(sigOP))),1); % partie où l'on trouve l'endroit où se déclenche dike find(sigOP>par.OPdike))
+            %disp(where_dyke)
             run sig_defo_v3
             par.dsigmn_sbh=dsigm.n/(param.rho*param.g*param.z);%*(param.rho*param.g*param.z); % s'annule car dsig / Pa d'OP % est-on sûr de ça ? oui plus ou moins; hmmm probabement que non finalement...
             par.dsigmt_sbh=dsigm.t/(param.rho*param.g*param.z);
@@ -185,6 +212,11 @@ while t<par.tfinal
             par.dsigmt_dike=dsigm.t/(param.rho*param.g*param.z)*param.dc;
             par.dsigOP_dike=dsigOP/(param.rho*param.g*param.z)*param.dc;
             par.newsill=dikecountdown;
+            catdike.width=[catdike.width par.wd];
+            catdike.t=[catdike.t t];
+            catdike.nbd=[catdike.nbd par.nbd];
+            catdike.n=[catdike.n par.ndike];
+            catdike.where=[catdike.where where_dyke];
         else
             if t<dikecountdown
                 param.dyke_act=1;
@@ -223,22 +255,26 @@ while t<par.tfinal
             %disp('on est là ?')
             sigm.n=dbc*par.dsigmn_dike+dpc*par.dsigmn_sbh;
             sigm.t=dbc*par.dsigmt_dike+dpc*par.dsigmt_sbh;
-            sigOP=dbc*par.dsigOP_dike+dpc*par.dsigOP_sbh+sigOP_ref; %/ simple addition constante des résultats du champs des contraintes non ?
+            sigOP=dbc*par.dsigOP_dike+dpc*par.dsigOP_sbh+sigOP_ref+par.dsigOPfault*exp(phi)*dt; %/ simple addition constante des résultats du champs des contraintes non ?
         else
             sigm.n=dpc*par.dsigmn;
             sigm.t=dpc*par.dsigmt;
-            sigOP=dpc*par.dsigOP+sigOP_ref;
+            sigOP=dpc*par.dsigOP+sigOP_ref+par.dsigOPfault*exp(phi)*dt;%*u
         end
+        %disp(sigOP)
     end
-    
+    t=t+dt;
     %sigOP=sigOP+par.dsigOP*dt;
     if t>tpsii(tpsi)/10*par.tfinal
             disp([num2str(floor(100*t/par.tfinal)),' % completed']);
             tpsi=tpsi+1;
             %disp(sigOP)
     end
-    %disp(sigOP)
-    cumulsigop=[cumulsigop sigOP];
+    if t>=tpsii2(tpsi2)/isave*par.tfinal
+            save(['results/' num2str(tpsi2)],'t','sigOP');
+            tpsi2=tpsi2+1;
+            %cumulsigop=[cumulsigop sigOP];
+    end
 end
 %----------------------%
 %-Close output files---%
